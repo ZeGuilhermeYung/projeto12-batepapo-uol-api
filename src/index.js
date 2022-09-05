@@ -31,6 +31,31 @@ async function insertUser(user) {
   await db.collection("messages").insertOne(user);
 }
 
+async function delayTime() {
+  time = Date.now();
+  try {
+    const participantsList = await db.collection("participants").find().toArray();
+    const messagesList = db.collection("messages").find(query).toArray();
+    messagesList = participantsList.filter((value) =>
+      Number(Date.now() - value.lastStatus) > 10000);
+      if (messagesList.length > 0) {
+        messagesList.map(async (value) => {
+              await insertObj({
+                  from: value.name,
+                  to: "Todos",
+                  text: 'sai da sala...',
+                  type: 'status',
+                  time: dayjs().format('HH:mm:ss')
+              });
+              await db.collection("participants").deleteOne(value);
+              return
+          })
+      };
+  } catch (error) {
+      console.log(error)
+  }
+}
+
 server.get('/participants', async (req, res) => {
   try {
       const participants = await getObject('participants');
@@ -101,7 +126,6 @@ server.get("/messages", async (req, res) => {
   const messagesList = db.collection("messages").find(query).toArray();
 
   try {
-    //const resMessages = await db.collection("messages").find().toArray();
 
     messagesList = participantsList.filter((participant) =>
       participant.to === "Todos" || participant.to === user || participant.from === user)
@@ -159,31 +183,16 @@ server.post('/messages', async (req, res) => {
   }
 });
 
-app.post("/status", async (req, res) => {
+server.post("/status", async (req, res) => {
   const { user } = req.headers;
 
+  setInterval(delayTime, 15000);
   try {
-    const findParticipant = await db
-      .collection("participants")
-      .findOne({ name: user });
-
-    if (!findParticipant) {
-      res.sendStatus(404);
-      return;
-    }
-    const userUpdate = { lastStatus: Date.now() };
-
-    await db
-      .collection("participants")
-      .updateOne({ name: user }, { $set: userUpdate });
-
-    console.log("aqui", findParticipant, "depois", userUpdate);
-
-    res.sendStatus(200);
+      await db.collection("participants").updateOne({ name: user }, { $set: { lastStatus: Date.now() } });
+      return res.sendStatus(200);
   } catch (error) {
-    console.log(error);
-    res.sendStatus(404);
+      return res.sendStatus(404);
   }
-});
+})
 
 server.listen(5000);
