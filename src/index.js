@@ -18,15 +18,9 @@ server.use(json());
       await mongoClient.connect();
       db = mongoClient.db('bate-bapo-UOL');
   } catch (error) {
-      console.log(error);
+      console.error(error);
   }
 })();
-
-const messageSchema = joi.object({
-  to: joi.string().empty(' ').required(),
-  text: joi.string().empty(' ').required(),
-  type: joi.valid('message', 'private_message').required()
-});
 
 const getObject = async (collection, query = {}) => {
   const object = await db.collection(collection).find(query).toArray();
@@ -63,8 +57,8 @@ server.post('/participants', async (req, res) => {
     time: dayjs().format('HH:mm:ss')
 };
 
-  const validation = participantSchema.validate({ name }, { abortEarly: false });
   const participantsList = await db.collection("participants").find().toArray();
+  const validation = participantSchema.validate({ name }, { abortEarly: false });
   const compareUser = participantsList.filter((user) => `${user.name}` === `${name}`);
 
   if (validation.error) {
@@ -80,9 +74,7 @@ try {
       name: name,
       lastStatus: Date.now()
     });
-
     insertUser(participantStatus);
-
     res.sendStatus(201);
   }
 
@@ -93,31 +85,29 @@ try {
 });
 
 server.get("/messages", async (req, res) => {
-  const { limit } = req.query;
+  const { limit } = Number(req.query);
   const { user } = req.headers;
 
+  const query = {
+    $or: [
+        {type: 'message'},
+        {from: user},
+        {to: user},
+        {to: 'Todos'}
+    ]
+};
+
+  const participantsList = await db.collection("participants").find().toArray();
+  const messagesList = db.collection("messages").find(query).toArray();
+
   try {
-    const resMessages = await db.collection("messages").find().toArray();
+    //const resMessages = await db.collection("messages").find().toArray();
 
-    if (limit) {
+    messagesList = participantsList.filter((participant) =>
+      participant.to === "Todos" || participant.to === user || participant.from === user)
 
-      const visibleMessages = resMessages.slice(-limit).filter((message) => {
-        if (message.type === "private_message") {
-          if (user === message.from || user === message.to) {
-            return true;
-          } else {
-            return false;
-          }
-        } else {
-          return true;
-        }
-      });
+    res.send(messagesList.slice(-limit));
 
-      res.send(visibleMessages);
-
-    } else {
-      res.send(resMessages);
-    }
 
   } catch (error) {
     console.error(error);
@@ -125,39 +115,47 @@ server.get("/messages", async (req, res) => {
   }
 });
 
-server.get('/messages', async (req, res) => {
-  const { limit } = req.query;
+server.post('/messages', async (req, res) => {
+  const { to, text, type } = req.body;
   const { user } = req.headers;
 
-  const query = {
-      $or: [
-          {type: 'message'},
-          {from: user},
-          {to: user},
-          {to: 'Todos'}
-      ]
-  };
+  const messageSchema = joi.object({
+    to: joi.string().empty(' ').required(),
+    text: joi.string().empty(' ').required(),
+    type: joi.valid('message', 'private_message').required()
+  });
+
+  const messageStatus = {
+    from: user,
+    to: to,
+    text: text,
+    type: type,
+    time: dayjs().format('HH:mm:ss')
+}
+
+  const validation = messageSchema.validate({ to, text, type }, { abortEarly: false });
+
+  const findParticipant = async (user) => {
+    const participant = await db.collection('participants').findOne({ name: user });
+    return participant;
+  }
 
   try {
-      if (!user || !(await userInParticipants(user))) {
-          res.status(400).send({ message: 'Usuário inválido'});
+
+      if (validation.error || !(await findParticipant(user)) || !((to === 'Todos') || await findParticipant(to))) {
+          const errors = validation.error ? 
+          validation.error.details.map(error => error.message)
+          : "Usuário inexistente";
+          res.status(422).send({ message: errors });
           return;
+      } else {
+        insertUser(messageStatus);
+        res.sendStatus(201);
       }
-
-      if (limit) {
-          const limitNum = Number(limitStr);
-          const messages = (await db.collection('messages').find(query).sort({_id: -1}).limit(limitNum).toArray()).reverse();
-
-          res.send(messages);
-          return;
-      }
-
-      const messages = (await getData('messages', query)).reverse();
-      res.send(messages);
 
   } catch (error) {
-      console.error(error);
-      res.sendStatus(500);
+    console.error(error);
+    res.status(500).send("Requisição incompleta, verifique os dados enviados");
   }
 });
 
