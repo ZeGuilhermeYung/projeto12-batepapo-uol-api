@@ -15,8 +15,8 @@ server.use(json());
 
 (async () => {
   try {
-      await client.connect();
-      db = client.db('bate-bapo-UOL');
+      await mongoClient.connect();
+      db = mongoClient.db('bate-bapo-UOL');
   } catch (error) {
       console.log(error);
   }
@@ -33,7 +33,11 @@ const getObject = async (collection, query = {}) => {
   return object;
 }
 
-app.get('/participants', async (req, res) => {
+async function insertUser(user) {
+  await db.collection("messages").insertOne(user);
+}
+
+server.get('/participants', async (req, res) => {
   try {
       const participants = await getObject('participants');
       res.send(participants);
@@ -47,20 +51,21 @@ app.get('/participants', async (req, res) => {
 server.post('/participants', async (req, res) => {
   const { name } = req.body;
 
-  const userSchema = joi.object({
-    name: joi.string().empty(' ').min(3).required()
+  const participantSchema = joi.object({
+    name: joi.string().empty(' ').required()
   });
 
-  const userStatus = {
+  const participantStatus = {
     from: name,
     to: 'Todos',
     text: 'entra na sala...',
     type: 'status',
     time: dayjs().format('HH:mm:ss')
-}
+};
 
-  const validation = userSchema.validate({ name }, { abortEarly: false });
-  const compareUser = list.filter((user) => `${user.name}` === `${name}`);
+  const validation = participantSchema.validate({ name }, { abortEarly: false });
+  const participantsList = await db.collection("participants").find().toArray();
+  const compareUser = participantsList.filter((user) => `${user.name}` === `${name}`);
 
   if (validation.error) {
       res.status(422).send("O campo de usuário não pode ser vazio.");
@@ -70,19 +75,16 @@ server.post('/participants', async (req, res) => {
 try {
   if (compareUser.length > 0) {
       res.status(409).send("Usuário já existente. Por favor, cadastre outro nome de usuário.");
-      return;
-  }
-
-  await db.collection('participants').insertOne({
-      name,
+  } else {
+    await db.collection('participants').insertOne({
+      name: name,
       lastStatus: Date.now()
-  });
+    });
 
-  await db.collection("participants").insertOne({ name: name, lastStatus: Date.now() });
+    insertUser(participantStatus);
 
-  insertObj(userStatus);
-
-  res.sendStatus(201);
+    res.sendStatus(201);
+  }
 
 } catch (error) {
   console.error(error);
