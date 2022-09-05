@@ -92,4 +92,73 @@ try {
 }
 });
 
+server.get("/messages", async (req, res) => {
+  const { limit } = req.query;
+  const { user } = req.headers;
+
+  try {
+    const resMessages = await db.collection("messages").find().toArray();
+
+    if (limit) {
+
+      const visibleMessages = resMessages.slice(-limit).filter((message) => {
+        if (message.type === "private_message") {
+          if (user === message.from || user === message.to) {
+            return true;
+          } else {
+            return false;
+          }
+        } else {
+          return true;
+        }
+      });
+
+      res.send(visibleMessages);
+
+    } else {
+      res.send(resMessages);
+    }
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).send("Resposta incompleta, verifique os dados solicitados");
+  }
+});
+
+server.get('/messages', async (req, res) => {
+  const { limit } = req.query;
+  const { user } = req.headers;
+
+  const query = {
+      $or: [
+          {type: 'message'},
+          {from: user},
+          {to: user},
+          {to: 'Todos'}
+      ]
+  };
+
+  try {
+      if (!user || !(await userInParticipants(user))) {
+          res.status(400).send({ message: 'Usuário inválido'});
+          return;
+      }
+
+      if (limit) {
+          const limitNum = Number(limitStr);
+          const messages = (await db.collection('messages').find(query).sort({_id: -1}).limit(limitNum).toArray()).reverse();
+
+          res.send(messages);
+          return;
+      }
+
+      const messages = (await getData('messages', query)).reverse();
+      res.send(messages);
+
+  } catch (error) {
+      console.error(error);
+      res.sendStatus(500);
+  }
+});
+
 server.listen(5000);
