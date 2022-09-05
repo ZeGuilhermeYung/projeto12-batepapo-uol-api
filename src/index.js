@@ -121,14 +121,12 @@ server.get("/messages", async (req, res) => {
 };
 
   try {
-
     if (limit) {
       const messagesList = await db.collection("messages").find(query).toArray();
       return res.send(messagesList.slice(-limit));
     }
     const messagesList = (await getObject("messages", query)).reverse();
     res.send(messagesList);
-
 
   } catch (error) {
     console.error(error);
