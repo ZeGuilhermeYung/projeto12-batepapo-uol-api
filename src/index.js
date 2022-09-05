@@ -159,4 +159,31 @@ server.post('/messages', async (req, res) => {
   }
 });
 
+app.post("/status", async (req, res) => {
+  const { user } = req.headers;
+
+  try {
+    const findParticipant = await db
+      .collection("participants")
+      .findOne({ name: user });
+
+    if (!findParticipant) {
+      res.sendStatus(404);
+      return;
+    }
+    const userUpdate = { lastStatus: Date.now() };
+
+    await db
+      .collection("participants")
+      .updateOne({ name: user }, { $set: userUpdate });
+
+    console.log("aqui", findParticipant, "depois", userUpdate);
+
+    res.sendStatus(200);
+  } catch (error) {
+    console.log(error);
+    res.sendStatus(404);
+  }
+});
+
 server.listen(5000);
