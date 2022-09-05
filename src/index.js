@@ -16,7 +16,7 @@ server.use(json());
 (async () => {
   try {
       await mongoClient.connect();
-      db = mongoClient.db('bate-bapo-UOL');
+      db = mongoClient.db("bate-bapo-UOL");
   } catch (error) {
       console.error(error);
   }
@@ -31,34 +31,32 @@ async function insertUser(user) {
   await db.collection("messages").insertOne(user);
 }
 
-async function delayTime() {
-  time = Date.now();
+async function cleanUsers() {
   try {
     const participantsList = await db.collection("participants").find().toArray();
-    const messagesList = db.collection("messages").find(query).toArray();
-    messagesList = participantsList.filter((value) =>
+    const refreshParticipants = participantsList.filter((value) =>
       Number(Date.now() - value.lastStatus) > 10000);
-      if (messagesList.length > 0) {
-        messagesList.map(async (value) => {
-              await insertObj({
-                  from: value.name,
-                  to: "Todos",
-                  text: 'sai da sala...',
-                  type: 'status',
-                  time: dayjs().format('HH:mm:ss')
-              });
-              await db.collection("participants").deleteOne(value);
-              return
-          })
+      if (refreshParticipants.length > 0) {
+        refreshParticipants.map(async (value) => {
+          await insertUser({
+            from: value.name,
+            to: "Todos",
+            text: "sai da sala...",
+            type: "status",
+            time: dayjs().format("HH:mm:ss")
+          });
+          await db.collection("participants").deleteOne(value);
+          return;
+        });
       };
   } catch (error) {
-      console.log(error)
+      console.error(error);
   }
 }
 
-server.get('/participants', async (req, res) => {
+server.get("/participants", async (req, res) => {
   try {
-      const participants = await getObject('participants');
+      const participants = await getObject("participants");
       res.send(participants);
       
   } catch (error) {
@@ -67,19 +65,19 @@ server.get('/participants', async (req, res) => {
   }
 });
 
-server.post('/participants', async (req, res) => {
+server.post("/participants", async (req, res) => {
   const { name } = req.body;
 
   const participantSchema = joi.object({
-    name: joi.string().empty(' ').required()
+    name: joi.string().empty(" ").required()
   });
 
   const participantStatus = {
     from: name,
-    to: 'Todos',
-    text: 'entra na sala...',
-    type: 'status',
-    time: dayjs().format('HH:mm:ss')
+    to: "Todos",
+    text: "entra na sala...",
+    type: "status",
+    time: dayjs().format("HH:mm:ss")
 };
 
   const participantsList = await db.collection("participants").find().toArray();
@@ -95,7 +93,7 @@ try {
   if (compareUser.length > 0) {
       res.status(409).send("Usuário já existente. Por favor, cadastre outro nome de usuário.");
   } else {
-    await db.collection('participants').insertOne({
+    await db.collection("participants").insertOne({
       name: name,
       lastStatus: Date.now()
     });
@@ -110,27 +108,26 @@ try {
 });
 
 server.get("/messages", async (req, res) => {
-  const { limit } = Number(req.query);
+  const { limit } = req.query;
   const { user } = req.headers;
 
   const query = {
     $or: [
-        {type: 'message'},
-        {from: user},
-        {to: user},
-        {to: 'Todos'}
+      {type: "message"},
+      {from: user},
+      {to: user},
+      {to: "Todos"}
     ]
 };
 
-  const participantsList = await db.collection("participants").find().toArray();
-  const messagesList = db.collection("messages").find(query).toArray();
-
   try {
 
-    messagesList = participantsList.filter((participant) =>
-      participant.to === "Todos" || participant.to === user || participant.from === user)
-
-    res.send(messagesList.slice(-limit));
+    if (limit) {
+      const messagesList = await db.collection("messages").find(query).toArray();
+      return res.send(messagesList.slice(-limit));
+    }
+    const messagesList = (await getObject("messages", query)).reverse();
+    res.send(messagesList);
 
 
   } catch (error) {
@@ -139,14 +136,14 @@ server.get("/messages", async (req, res) => {
   }
 });
 
-server.post('/messages', async (req, res) => {
+server.post("/messages", async (req, res) => {
   const { to, text, type } = req.body;
   const { user } = req.headers;
 
   const messageSchema = joi.object({
-    to: joi.string().empty(' ').required(),
-    text: joi.string().empty(' ').required(),
-    type: joi.valid('message', 'private_message').required()
+    to: joi.string().empty(" ").required(),
+    text: joi.string().empty(" ").required(),
+    type: joi.valid("message", "private_message").required()
   });
 
   const messageStatus = {
@@ -154,28 +151,28 @@ server.post('/messages', async (req, res) => {
     to: to,
     text: text,
     type: type,
-    time: dayjs().format('HH:mm:ss')
+    time: dayjs().format("HH:mm:ss")
 }
 
   const validation = messageSchema.validate({ to, text, type }, { abortEarly: false });
 
   const findParticipant = async (user) => {
-    const participant = await db.collection('participants').findOne({ name: user });
+    const participant = await db.collection("participants").findOne({ name: user });
     return participant;
   }
 
   try {
 
-      if (validation.error || !(await findParticipant(user)) || !((to === 'Todos') || await findParticipant(to))) {
-          const errors = validation.error ? 
-          validation.error.details.map(error => error.message)
-          : "Usuário inexistente";
-          res.status(422).send({ message: errors });
-          return;
-      } else {
-        insertUser(messageStatus);
-        res.sendStatus(201);
-      }
+    if (validation.error || !(await findParticipant(user)) || !((to === "Todos") || await findParticipant(to))) {
+      const errors = validation.error ? 
+      validation.error.details.map(error => error.message)
+      : "Usuário inexistente";
+      res.status(422).send({ message: errors });
+      return;
+    } else {
+      insertUser(messageStatus);
+      res.sendStatus(201);
+    }
 
   } catch (error) {
     console.error(error);
@@ -185,14 +182,18 @@ server.post('/messages', async (req, res) => {
 
 server.post("/status", async (req, res) => {
   const { user } = req.headers;
-
-  setInterval(delayTime, 15000);
   try {
-      await db.collection("participants").updateOne({ name: user }, { $set: { lastStatus: Date.now() } });
+      await db.collection("participants")
+      .updateOne(
+        { name: user },
+        { $set: { lastStatus: Date.now() }
+      });
       return res.sendStatus(200);
   } catch (error) {
       return res.sendStatus(404);
   }
 })
+
+setInterval(cleanUsers, 15000);
 
 server.listen(5000);
