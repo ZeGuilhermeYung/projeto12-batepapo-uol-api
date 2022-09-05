@@ -21,4 +21,14 @@ server.use(json());
   }
 })();
 
+const userSchema = joi.object({
+  name: joi.string().empty(' ').min(3).required()
+});
+
+const messageSchema = joi.object({
+  to: joi.string().empty(' ').required(),
+  text: joi.string().empty(' ').required(),
+  type: joi.valid('message', 'private_message').required()
+});
+
 server.listen(5000);
